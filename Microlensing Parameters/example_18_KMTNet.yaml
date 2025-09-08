@@ -1,0 +1,22 @@
+
+parameters:
+  t_0: 2456141.736
+  u_0: 0.12 
+  t_E: 68.25
+  rho: 0.0007
+  pi_E_N: -0.026
+  pi_E_E: 0.029
+  s: 0.75  
+  q: 0.005
+  alpha: 338.1818181818182
+coords: 17:53:18.17 -30:28:16.2
+flux_source: 550.
+flux_blending: 40.
+relative_uncertainty: 0.02
+methods: [2456040, VBBL, 2456260]
+time_settings:
+  type: random
+  n_epochs: 800
+  t_start: 2456040.
+  t_stop: 2456260.
+file_out: kmtnet_high_mag.dat
