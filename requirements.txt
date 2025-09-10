@@ -1,0 +1,7 @@
+mulensmodel
+numpy
+scipy>=0.18.0
+astropy>=1.2.0
+matplotlib
+simpy
+py-cpuinfo
