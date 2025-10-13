@@ -1,0 +1,6 @@
+{
+    "python.analysis.extraPaths": [
+        "./ExoplanetCatalog/helpers",
+        "./ExoplanetCatalog/utils"
+    ]
+}
