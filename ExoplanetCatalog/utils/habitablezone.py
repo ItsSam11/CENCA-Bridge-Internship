@@ -1,4 +1,4 @@
-from ExoplanetCatalog.utils.numberFormat import getFloat, getText
+from utils.numberFormat import getFloat, getText
 from math import *
 
 spectralTypeTempRadius = {
