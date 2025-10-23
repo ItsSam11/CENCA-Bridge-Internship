@@ -13,12 +13,17 @@ titles = {
 }
 
 def isHabitable(xmlPair):
-    system, planet, star, filename = xmlPair
+    # Extract values from the dict by keys
+    system = xmlPair['system']
+    planet = xmlPair['planet']
+    star = xmlPair['star']
+    filename = xmlPair['filename']
     maxa = 0
     if star is None:
         return False # no binary systems (yet)
 
     hzData = hzLimits(star)
+
     if hzData is None:
         return False
 
@@ -35,7 +40,11 @@ def isHabitable(xmlPair):
     return False
 
 def isFiltered(xmlPair,filters):
-    system, planet, star, filename = xmlPair
+    # Extract values from the dict by keys
+    system = xmlPair['system']
+    planet = xmlPair['planet']
+    star = xmlPair['star']
+    filename = xmlPair['filename']
     for filter in filters:
         if filter=="confirmed":
             confirmed = False

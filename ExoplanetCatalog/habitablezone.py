@@ -12,6 +12,7 @@ spectralTypeTempRadius = {
 }
 
 def hzLimits(star):
+    print(star)
     if star is None:
         return None
 

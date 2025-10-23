@@ -51,66 +51,71 @@ def getEditButton(xmlPair,o):
             return "<a class='editbutton' href='/edit/form/"+filename+path[7:]+"'>edit</a>"
     return ""
 
-def render(xmlPair,type,editbutton=True):
+def render(xmlPair,kind,editbutton=True):
     editbutton = False ## Manual override (June 21 2020)
-    system, planet, star, filename = xmlPair
-    if type=="numberofplanets":
+    # Extract values from the dict by keys
+    system = xmlPair['system']
+    planet = xmlPair['planet']
+    star = xmlPair['star']
+    filename = xmlPair['filename']
+    if kind=="numberofplanets":
         return "%d"%len(system.findall(".//planet"))
-    if type=="numberofstars":
+    if kind=="numberofstars":
         return "%d"%len(system.findall(".//star"))
-    if type in ["distance"]:
-        o = system.find("./"+type)
+    if kind in ["distance"]:
+        o = system.find("./"+kind)
         html = renderFloat(o)
         if editbutton:
             html += getEditButton(xmlPair,o)
         return html
-    if type=="distancelightyears":
+    if kind=="distancelightyears":
         return renderFloat(system.find("./distance"),3.2615638)
-    if type=="massEarth":
+    if kind=="massEarth":
         return renderFloat(planet.find("./mass"),317.82841)
-    if type in ["mass","radius","period","eccentricity","temperature","semimajoraxis"]:
-        o = planet.find("./"+type)
+    if kind in ["mass","radius","period","eccentricity","temperature","semimajoraxis"]:
+        o = planet.find("./"+kind)
+        print(o)
         html = renderFloat(o)
         if editbutton:
             html += getEditButton(xmlPair,o)
         return html
-    if type=="radiusEarth":
+    if kind=="radiusEarth":
         return renderFloat(planet.find("./radius"),11.208981)
     # Text based object
-    if type=="rightascension":
+    if kind=="rightascension":
         return renderText(system.find("./rightascension"))
-    if type=="declination":
+    if kind=="declination":
         return renderText(system.find("./declination"))
-    if type=="image":
+    if kind=="image":
         try:
             return planet.find("./image").text
         except:
             return None
-    if type=="imagedescription":
+    if kind=="imagedescription":
         try:
             return planet.find("./imagedescription").text
         except:
             return None
-    if type=="description":
+    if kind=="description":
         o = planet.find("./description")
         html = renderText(o)
         if editbutton:
             html += getEditButton(xmlPair,o)
         return html
-    if type=="name":
+    if kind=="name":
         return renderText(planet.find("./name"))
-    if type=="namelink":
+    if kind=="namelink":
         planetname = planet.find("./name").text
         return "<a href=\"/planet/%s/\"><span class=\"numericvalue\">%s</span></a>"%(urllib.parse.quote(planetname.encode('utf8')),planetname)
-    if type=="discoveryyear":
+    if kind=="discoveryyear":
         return renderText(planet.find("./discoveryyear"))
-    if type=="discoverymethod":
+    if kind=="discoverymethod":
         return renderText(planet.find("./discoverymethod"))
-    if type=="lastupdate":
+    if kind=="lastupdate":
         return renderText(planet.find("./lastupdate"))
-    if type=="systemname":
+    if kind=="systemname":
         return renderText(system.find("./name"))
-    if type=="alternativenames":
+    if kind=="alternativenames":
         alternativenames = notAvailableString 
         names = planet.findall("./name")
         for i,name in enumerate(names[1:]):
@@ -120,7 +125,7 @@ def render(xmlPair,type,editbutton=True):
                 alternativenames += ", "
             alternativenames += name.text
         return alternativenames
-    if type=="systemalternativenames":
+    if kind=="systemalternativenames":
         systemalternativenames = notAvailableString 
         systemnames = system.findall("./name")
         for i,name in enumerate(systemnames[1:]):
@@ -130,7 +135,7 @@ def render(xmlPair,type,editbutton=True):
                 systemalternativenames += ", "
             systemalternativenames += name.text
         return systemalternativenames
-    if type=="lists":
+    if kind=="lists":
         lists = notAvailableString 
         ls = planet.findall("./list")
         for i,l in enumerate(ls):
@@ -141,16 +146,16 @@ def render(xmlPair,type,editbutton=True):
             lists += l.text
         return lists
     # Host star fields
-    if type[0:4]=="star":
+    if kind[0:4]=="star":
         if star is None:
             return notAvailableString
-        type = type[4:]
+        kind = kind[4:]
         # Text based object
-        if type=="spectraltype":
-            return renderText(star.find("./spectraltype"))
-        if type=="name":
+        if kind=="spectralkind":
+            return renderText(star.find("./spectralkind"))
+        if kind=="name":
             return renderText(star.find("./name"))
-        if type=="alternativenames":
+        if kind=="alternativenames":
             alternativenames = notAvailableString 
             names = star.findall("./name")
             for i,name in enumerate(names[1:]):
@@ -160,16 +165,16 @@ def render(xmlPair,type,editbutton=True):
                     alternativenames += ", "
                 alternativenames += name.text
             return alternativenames
-        if type in ["mass","radius","age","metallicity","temperature","magV"]:
-            o = star.find("./"+type)
+        if kind in ["mass","radius","age","metallicity","temperature","magV"]:
+            o = star.find("./"+kind)
             html = renderFloat(o)
             if editbutton:
                 html += getEditButton(xmlPair,o)
             return html
         # Default: just search for the property in the planet xml. 
-        return renderFloat(star.find("./"+type))
+        return renderFloat(star.find("./"+kind))
     # Long texts
-    if type=="systemcategory":
+    if kind=="systemcategory":
         systemcategory = ""
         systemname = renderText(system.find("./name"))
         if len(system.findall(".//planet"))==1:
@@ -183,4 +188,4 @@ def render(xmlPair,type,editbutton=True):
         return systemcategory
 
     # Default: just search for the property in the planet xml. 
-    return renderFloat(planet.find("./"+type))
+    return renderFloat(planet.find("./"+kind))
