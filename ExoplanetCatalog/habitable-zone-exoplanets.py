@@ -7,7 +7,7 @@ from utils.numberFormat import getFloat, getText
 
 url = "https://github.com/OpenExoplanetCatalogue/oec_gzip/raw/master/systems.xml.gz"
 
-TARGET_METHOD = "transit"
+TARGET_METHOD = ""
 
 def isHabitable(xmlPair):
     system, planet, star, filename = xmlPair
@@ -17,22 +17,41 @@ def isHabitable(xmlPair):
     
     hzData = hzLimits(star)
     if hzData is None:
-        return False # missing stellar data
-    
-    HZinner2, HZinner, HZouter, HZouter2, stellarRadius = hzData
+        HZinner2, HZinner, HZouter, HZouter2, stellarRadius = (0.75, 0.95, 1.67, 1.77, 1.0)
+    else:
+        HZinner2, HZinner, HZouter, HZouter2, stellarRadius = hzData
 
+    # Get or estimate semi-major-axis
     semimajoraxis = getFloat(planet, "./semimajoraxis")
+
     if semimajoraxis is None:
         # Estimate from period and stellar mass if possible
         hostmass = getFloat(star, "./mass", 1.0)
-        period = getFloat(planet, "./period", 265.25)
-        semimajoraxis = pow(pow(period / 6.283 / 365.25, 2) ** 39.49 / hostmass, 1.0 / 3.0)
+        period = getFloat(planet, "./period")
 
+        if period is not None:    
+            semimajoraxis = pow(pow(period / 6.283 / 365.25, 2) ** 39.49 / hostmass, 1.0 / 3.0)
+        else:
+            if detection_method.lower() == "microlensing":
+                semimajoraxis = 2.5 # microlensing often finds cold planets between 2 - 3 AU
+            elif detection_method.lower() == "transit":
+                semimajoraxis = 0.05 # transit usually detects close in planets
+            elif detection_method.lower() == "radial velocity":
+                semimajoraxis = 1.0 # average estimate
+            else:
+                return False # no meaningful data to evaluate
+    
+    in_hz = semimajoraxis> HZinner2 and semimajoraxis < HZouter2
+                
+    if in_hz:
+        print(f"{getText(planet, "./name")} ({detection_method}) may be in habitable zone.")
+    else:
+        print(f"{getText(planet, "./name")} ({detection_method}) outside HZ.")
+    return in_hz
     # Planet considered habitable if its within "optimistic" HZ range
-    if semimajoraxis > HZinner2 and semimajoraxis < HZouter2:
-        return True
-    return False
 
+
+# Code for open the file of Catalog
 try:
     with urllib.request.urlopen(url) as response:
         gzipped_file = io.BytesIO(response.read())
@@ -58,112 +77,44 @@ for system in oec.findall(".//system"):
 
     #is_binary = system.findtext("binary")
 
-    for host_star_element in system.findall("./star"):
+    for star in system.findall("./star"):
 
-        host_star_name = host_star_element.findtext("name") or system_name
+        star_name = star.findtext("name") or system_name
 
-        # Calculate the habitable zone of the host star
-        hz_limits = hzLimits(host_star_element)
-
-        if hz_limits is None:
-            print(f"Skipping system {system_name} - incomplete stellar data.")
-            # Cannot calculate HZ (star is missing required data), skip this system
-            continue
-
-        # Use Conservative Habitable Zone Limits 
-        HZinner_conservative = hz_limits[1]
-        HZouter_conservative = hz_limits[2]
-
-        print(f"System: {system_name}, Host Star: {host_star_name}")
-
-        print(f"HZ inner:  {HZinner_conservative}, HZ Outer: {HZouter_conservative}")
-
-        # Check all planets within specific system
-
-        for planet in host_star_element.findall("./planet"):
+        for planet in star.findall("./planet"):
             #print("GOT HERE")
 
             planet_name = planet.findtext("name") or "Unnamed planet"
             detection_method = getText(planet, "./discoverymethod")
 
-            semi_major_axis = getFloat(planet, "./semimajoraxis")
-            period = getFloat(planet, "./period")
-
-            if semi_major_axis is None and period is not None:
-                hostmass = getFloat(host_star_element, "./mass", 1.0)
-                semi_major_axis = ((period / 6.283 / 365.25) ** 2 * 39.49 / hostmass) ** (1.0 / 3.0)
-
-
-            if semi_major_axis is None:
-                #in_hz = None
-                # Estimate from period and stellar mass if possible
-                hostmass = getFloat(host_star_element,"./mass",1.)
-                period = getFloat(planet,"./period",265.25)
-                semimajoraxis = pow(pow(period/6.283/365.25,2)*39.49/hostmass,1.0/3.0)
-            else: 
-                in_hz = HZinner_conservative < semi_major_axis < HZouter_conservative
-            
-        
-            # Does discovery method match the filter
-            method_matches = (
-                not TARGET_METHOD or
-                (detection_method and detection_method.strip().lower() == TARGET_METHOD.lower()
-            ))
-
-            if not method_matches:
+            if TARGET_METHOD and (not detection_method or detection_method.lower() != TARGET_METHOD.lower()):
                 continue
 
-            mass = planet.findtext("mass") or "Unknown"
-            radius = planet.findtext("radius") or "Unknown"
+            # check habitability
+            habitable = isHabitable((system, planet, star, None))
 
-            if in_hz:
+            if habitable:
                 hz_candidates_found += 1
-                hz_status = "In habitable zone"
-            elif in_hz is None:
-                hz_unknown += 1
-                hz_status = "Unknown"
-            else:
-                continue
+                mass = planet.findtext("mass") or "Unknow"
+                radius = planet.findtext("radius") or "Unknow"
+                semimajoraxis = getFloat(planet, "./semimajoraxis")
+                period = getFloat(planet, "./period")
             
-            print("\n--- Planet ---")
-            print(f"System: {system_name}")
-            print(f"Host Star: {host_star_name}")
-            print(f"Planet: {planet_name}")
-            print(f"Discovery Method: {detection_method or 'Unknown'}")
-            print(f"Semi-major Axis: {semi_major_axis if semi_major_axis else 'Unknown'} AU")
-            print(f"HZ Range: {HZinner_conservative:.3f} – {HZouter_conservative:.3f} AU")
-            print(f"Mass (M_Jup): {mass}")
-            print(f"Radius (R_Jup): {radius}")
-            print(f"HZ Status: {hz_status}")
+                print("\n--- Planet ---")
+                print(f"System: {system_name}")
+                print(f"Host Star: {star_name}")
+                print(f"Planet: {planet_name}")
+                print(f"Discovery Method: {detection_method or 'Unknown'}")
+                print(f"Semi-major Axis: {semimajoraxis or 'Estimated/Unknow'} AU")
+                
+                if semimajoraxis is None and period:
+                    print(f"Estimated from Period: {period} days")
+
+                print(f"Mass (M_Jup): {mass}")
+                print(f"Radius (R_Jup): {radius}")
 
 
 print("\n" + "="*60)
 print(f"Total Star Systems Processed: {total_systems_processed}")
-print(f"HZ Candidates Found (Method: {TARGET_METHOD}): {hz_candidates_found}")
+print(f"HZ Candidates Found (Method: {detection_method}): {hz_candidates_found}")
 print("="*50)
-
-""" 
-print('---Habitable Zone Planets---')
-
-for planet in oec.findall(".//planet"):
-    if planet.find("habitable") is not None:
-        name = planet.findtext("name")
-        mass = planet.findtext("mass")
-        radius = planet.findtext("radius")
-
-        # Get name of host star/system
-        system_name = planet.getParent().findtext("name")
-
-        # Note: 'mass' is in Jupiter masses, and 'radius' is in Jupiter radii
-        # The OEC uses a Jupiter-centric unit system for planets.
-        
-        print(f"System: {system_name}, Planet: {name}, Mass (M_Jup): {mass}, Radius (R_Jup): {radius}")
-    else:
-        print("No se obtuvo ningun planeta en la zona habitable") """
-
-
-""" oec= ET.parse(gzip.GzipFile(fileobj=io.BytesIO(urllib.request.urlopen(url).read())))
-
-# Mass and radius of all planets
-for planet in oec.findall(".//planet"):
-    print([planet.findtext("mass"), planet.findtext("radius")]) """
