@@ -93,7 +93,7 @@ for xmlPair in xmlPairs:
 
     d['fields'].append(system_name)
     d['fields'].append(planet_name)
-    
+
     p.append(d)
 
 # Extract rows as lists
@@ -171,6 +171,7 @@ plt.grid(True)
 plt.legend()
 plt.show()
 
+# ------ CONSTANTS -----
 G = 6.6743e-11
 c = 2.998e8
 M_o_to_kg = 1.9885e30
@@ -236,11 +237,20 @@ xcenters = 0.5 * (xedges[:-1] + xedges[1:])
 ycenters = 0.5 * (yedges[:-1] + yedges[1:])
 
 # --- Detect density peaks automatically ---
-peaks = peak_local_max(smoothed, min_distance=2, threshold_rel=0.3)
+peaks = peak_local_max(
+    smoothed, 
+    min_distance=1, # smaller, more peaks allowed
+    threshold_rel=0.10, #smaller, includer weaker peaks
+    num_peaks=4 # top 4 strongest peaks
+)
 
 # Convert peak indices to q, s coordinates
 q_peaks = xcenters[peaks[:, 0]]
 s_peaks = ycenters[peaks[:, 1]]
+
+print("\nDetected density peaks:")
+for i, (qv, sv) in enumerate(zip(q_peaks, s_peaks), 1):
+    print(f"Peak {i}: q ≈ {qv:.2e}, s ≈ {sv:.3f}")
 
 # ---- Plot contour + peaks ----
 plt.figure(figsize=(9,6))
@@ -249,7 +259,7 @@ plt.scatter(x, y, s=10, c='gray', alpha=0.4, label='Data points')
 contour = plt.contourf(xcenters, ycenters, smoothed.T, levels=25, cmap='viridis')
 plt.colorbar(contour, label='Density')
 
-# Mark peaks with red stars
+# Mark all peaks with red stars
 plt.scatter(q_peaks, s_peaks, color='red', marker='*', s=200, label='Density peaks')
 
 # Optional: label peaks with numbers
@@ -276,9 +286,9 @@ for i, (qv, sv) in enumerate(zip(q_peaks, s_peaks), 1):
 # ==============================================================
 
 # Parameters: adjust to control how close "near" means
-log_q_radius = 0.5      # tolerance in log10(q), 0.5 ≈ factor of ~3 difference
-s_scale = 0.15          # scales how tightly to match s values
-d_thresh = 0.6          # combined distance threshold
+log_q_radius = 0.3      # allowed spread in log10(q)
+s_radius = 0.15         # allowed spread in s
+d_thresh = 0.6          # combined distance threshold (dimensionless)
 
 # Convert to arrays for convenience
 q_values = df['q'].values
@@ -288,14 +298,15 @@ logq = np.log10(q_values)
 for i, (q_center, s_center) in enumerate(zip(q_peaks, s_peaks), 1):
     logq_center = np.log10(q_center)
 
-    # Distance metric (log-space for q, linear for s)
-    d_vals = np.sqrt((logq - logq_center)**2 + ((s_values - s_center) / s_scale)**2)
+    # Distance metric combining log(q) and s differences
+    d_vals = np.sqrt(((logq - logq_center) / log_q_radius)**2 + ((s_values - s_center) / s_radius)**2)
+    
     mask = d_vals <= d_thresh
 
     nearby = df[mask].copy()
 
     print(f"\n===== Peak {i}: q ≈ {q_center:.2e}, s ≈ {s_center:.3f} =====")
-    print(f"Search window: ±{log_q_radius:.2f} dex in q, ±{s_scale:.2f} in s")
+    print(f"Search window: ±{log_q_radius:.2f} dex in q, ±{s_radius:.2f} in s")
     print(f"Found {len(nearby)} systems near this density peak.\n")
 
     if len(nearby) > 0:
@@ -305,39 +316,64 @@ for i, (q_center, s_center) in enumerate(zip(q_peaks, s_peaks), 1):
     else:
         print("No systems found near this peak. Try relaxing thresholds.")
 
-# --- Optional: Save peaks to CSV ---
-""" csv_name = 'density_peaks.csv'
-with open(csv_name, 'w', newline='') as fh:
-    writer = csv.writer(fh)
-    writer.writerow(['peak_index', 'q_value', 's_value'])
-    for i, (qv, sv) in enumerate(zip(q_peaks, s_peaks), 1):
-        writer.writerow([i, f"{qv:.12e}", f"{sv:.6f}"])
-print(f"\nSaved peaks to {csv_name}") """
+# ----- Calculate Einteins Radius and Einsteing Time for 4 systems -----
 
-""" # --- Plot setup ---
-plt.figure(figsize=(8,6))
-plt.semilogx()
-plt.scatter(x, y, s=10, c='gray', alpha=0.4, label='Data points')
-contour = plt.contour(X, Y, smoothed.T, levels=10, cmap='viridis')
-plt.colorbar(contour, label='Count Density') """
+# Note: Planet mass is in Earth masses (M_earth), Star mass is in Solar masses (M_sun)
+systems = pd.DataFrame({
+    'System': ['HD 210277 b', 'HD 128356 b', 'kappa CrB b', 'HD 141399 d'],
+    'PlanetMass_Earth': [391.0, 283.0, 509.0, 375.0],
+    'StarMass_Solar': [1.09, 0.65, 1.51, 1.07]
+})
 
-""" # ---- Candidate peak selection: require a minimum height relative to global max ----
-N = 4 #Number of peaks to mark
-min_frac = 0.20
-global_max = smoothed.max()
-threshold = min_frac * global_max
+# ------ CONSTANTS -----
+G = 6.6743e-11 # Gravitational Constant (m^3 kg^-1 s^-2)
+c = 2.998e8 # Speed of light (m/s)
+M_sun_to_kg = 1.989e30 # Solar Mass (kg)
+M_earth_to_kg = 5.972e24 # Earth Mass (kg)  
+pc_to_m = 3.086e16 # Parsec to meter (m/pc)  
+muas_to_rad = 4.8481e-12 # micro-arcsecond to radian (rad/muas)
 
+# --- Microlensing Geometry Parameters ---
+D_l_pc = 6770.0 # Lens Distance (pc)
+tilde_D_pc = 1502.0 # Effective Distance Term (D_L * D_LS / D_S) (pc)
+mu_LS_muas_per_day = 15.0 # Relative proper motion (muas/day)
 
+# --- 1. Total Lens Mass (M_L) in kg ---
+# Convert masses to kg and sum them to get the total lens mass
+systems['PlanetMass_kg'] = systems['PlanetMass_Earth'] * M_earth_to_kg
+systems['StarMass_kg'] = systems['StarMass_Solar'] * M_sun_to_kg
+systems['TotalMass_kg'] = systems['PlanetMass_kg'] + systems['StarMass_kg']
 
-# --- Final styling ---
-plt.xlim(df['q'].min()*0.8, df['q'].max()*1.5)
-plt.ylim(0, df['s_Median'].max() + 0.1)
-plt.xlabel('Mass Ratio, q')
-plt.ylabel('s')
-plt.title('Density Contour via 2D Histogram (With Filtered Peaks & Centroids)')
-plt.legend(loc='upper right')
-plt.tight_layout()
-plt.show() """
+# --- 2. Effective Distance Term (tilde_D) in m ---
+tilde_D_m = tilde_D_pc * pc_to_m
+
+# --- 3. Angular Einstein Radius ($\theta_E$) ---
+# Formula for R_E (in m): R_E = sqrt( (4G * M_L / c^2) * tilde_D )
+systems['R_E_m'] = np.sqrt((4 * G * systems['TotalMass_kg'] / c**2) * tilde_D_m)
+
+# Convert R_E to angular Einsteins Radius ($\theta_E$) in radians: theta_E = R_E / D_L
+systems['theta_E_rad'] = systems['R_E_m'] / (D_l_pc * pc_to_m) 
+
+# Convert theta from radians to micro-arcseconds
+systems['EinsteinRadius_muas'] = systems['theta_E_rad'] / muas_to_rad
+
+# --- 4. Einstein Time ($t_E$) in days ---
+# Formula for t_E (in days): t_E = $\theta_E$ / $\mu_{LS}$
+systems['EinsteinTime_days'] = systems['EinsteinRadius_muas'] / mu_LS_muas_per_day
+
+# Final Output 
+final_results = systems[['System', 'EinsteinRadius_muas', 'EinsteinTime_days']].copy()
+
+print("--- Microlensing Parameters for 4 selected systems ---")
+print(f"Effective Distance Term (D_L*D_LS/D_S): {tilde_D_pc} pc")
+print(f"Relative Proper Motion (mu_LS): {mu_LS_muas_per_day} muas/day\n")
+
+print("--- Calculated Einstein Radius (theta_E) and Einstein Time (t_E) ---")
+print("| System | Einstein Radius ($\mathbf{\mu\text{as}}$) | Einstein Time ($\mathbf{days}$) |")
+print(final_results.round(2).to_markdown(index=False, numalign="center"))
+
+#print(systems.dtypes)
+#print(systems[['System', 'EinsteinRadius_muas', 'EinsteinTime_days']])
 
 df.to_csv('Habitable_Planet_microlensing.csv', index = False)
 
