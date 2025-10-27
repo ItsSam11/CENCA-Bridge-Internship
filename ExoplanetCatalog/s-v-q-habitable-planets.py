@@ -206,8 +206,8 @@ x = df['q'].values
 y = df['s_Median'].values
 
 # Define bins in x and y, optionally add margins as per needs
-bins_x = np.logspace(np.log10(x.min()*0.5), np.log10(x.max()*1.5), 30)
-bins_y = np.linspace(y.min()*0.5, y.max()*1.5, 30)
+bins_x = np.logspace(np.log10(x.min()*0.5), np.log10(x.max()*1.5), 40) # PUEDE SER 40, antes era 30
+bins_y = np.linspace(y.min()*0.5, y.max()*1.5, 40)
 
 heatmap, xedges, yedges = np.histogram2d(x, y, bins=[bins_x, bins_y])
 
@@ -230,7 +230,7 @@ plt.show()
 # Find peak indices values programatically
 
 # --- Smooth the heatmap slightly to highlight real peaks ---
-smoothed = gaussian_filter(heatmap, sigma=1.5)
+smoothed = gaussian_filter(heatmap, sigma=0.7)
 
 # Get bin centers (for plotting & coordinate conversion)
 xcenters = 0.5 * (xedges[:-1] + xedges[1:])
@@ -240,13 +240,27 @@ ycenters = 0.5 * (yedges[:-1] + yedges[1:])
 peaks = peak_local_max(
     smoothed, 
     min_distance=1, # smaller, more peaks allowed
-    threshold_rel=0.10, #smaller, includer weaker peaks
-    num_peaks=4 # top 4 strongest peaks
+    threshold_rel=0.3, #smaller, includer weaker peaks
+    num_peaks=6 # top 4 strongest peaks
 )
 
 # Convert peak indices to q, s coordinates
-q_peaks = xcenters[peaks[:, 0]]
-s_peaks = ycenters[peaks[:, 1]]
+#q_peaks = xcenters[peaks[:, 0]]
+#s_peaks = ycenters[peaks[:, 1]]
+
+q_peaks = 10**(np.interp(peaks[:, 0], np.arange(len(xedges)-1), np.log10((xedges[:-1] + xedges[1:]) / 2)))
+s_peaks = np.interp(peaks[:, 1], np.arange(len(yedges)-1), (yedges[:-1] + yedges[1:]) / 2)
+
+plt.figure()
+plt.imshow(smoothed.T, origin='lower', cmap='viridis', 
+           extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
+           aspect='auto')
+plt.scatter(q_peaks, s_peaks, color='red', marker='*', s=200)
+plt.xscale('log')
+plt.xlabel('q')
+plt.ylabel('s')
+plt.colorbar(label='Smoothed density')
+plt.show()
 
 print("\nDetected density peaks:")
 for i, (qv, sv) in enumerate(zip(q_peaks, s_peaks), 1):
@@ -285,6 +299,29 @@ for i, (qv, sv) in enumerate(zip(q_peaks, s_peaks), 1):
 # === FIND SYSTEMS CLOSE TO THE MAIN DENSITY PEAK(S) ===========
 # ==============================================================
 
+# Detect which type of star they orbit
+def classify_star_type(mass):
+    if pd.isna(mass):
+        return 'Unknown'
+    if mass > 16:
+        return 'O-type'
+    elif 2.1 <= mass <= 16:
+        return 'B-type'
+    elif 1.5 <= mass < 2.1:
+        return 'A-type'
+    elif 1.1 <= mass < 1.5:
+        return 'F-type'
+    elif 0.8 <= mass < 1.1:
+        return 'G-type'
+    elif 0.45 <= mass < 0.8:
+        return 'K-type'
+    elif mass < 0.45:
+        return 'M-type'
+    else:
+        return 'Unknown'
+    
+df['StarType'] = df['StarMass'].apply(classify_star_type)
+
 # Parameters: adjust to control how close "near" means
 log_q_radius = 0.3      # allowed spread in log10(q)
 s_radius = 0.15         # allowed spread in s
@@ -311,7 +348,7 @@ for i, (q_center, s_center) in enumerate(zip(q_peaks, s_peaks), 1):
 
     if len(nearby) > 0:
         # Display key columns
-        cols_to_show = ['System', 'Planet' ,'Mass', 'SemiMajorAxis', 'StarMass', 'q', 's_Median']
+        cols_to_show = ['System', 'Planet' ,'Mass', 'SemiMajorAxis', 'StarMass', 'StarType' , 'q', 's_Median']
         print(nearby[cols_to_show].sort_values(by='q').to_string(index=False))
     else:
         print("No systems found near this peak. Try relaxing thresholds.")
@@ -320,9 +357,10 @@ for i, (q_center, s_center) in enumerate(zip(q_peaks, s_peaks), 1):
 
 # Note: Planet mass is in Earth masses (M_earth), Star mass is in Solar masses (M_sun)
 systems = pd.DataFrame({
-    'System': ['HD 210277 b', 'HD 128356 b', 'kappa CrB b', 'HD 141399 d'],
-    'PlanetMass_Earth': [391.0, 283.0, 509.0, 375.0],
-    'StarMass_Solar': [1.09, 0.65, 1.51, 1.07]
+    # 2 for peak one, 2 for peak 2, 1 for peak 3, 1 for peak 4, 1 for peak 5
+    'System': ['HD 210277 b', 'HD 128356 b', 'kappa CrB b', 'HD 141399 d', 'Gliese 581 d', 'Kepler-34 (AB) b', 'HD 13908 c'],
+    'PlanetMass_Earth': [391.0, 283.0, 509.0, 375.0, 6.04, 69.9, 1630.0],
+    'StarMass_Solar': [1.09, 0.65, 1.51, 1.07, 0.310, 1.048, 1.290]
 })
 
 # ------ CONSTANTS -----
@@ -369,32 +407,10 @@ print(f"Effective Distance Term (D_L*D_LS/D_S): {tilde_D_pc} pc")
 print(f"Relative Proper Motion (mu_LS): {mu_LS_muas_per_day} muas/day\n")
 
 print("--- Calculated Einstein Radius (theta_E) and Einstein Time (t_E) ---")
-print("| System | Einstein Radius ($\mathbf{\mu\text{as}}$) | Einstein Time ($\mathbf{days}$) |")
+print("| System | Einstein Radius | Einstein Time | StarType")
 print(final_results.round(2).to_markdown(index=False, numalign="center"))
 
 #print(systems.dtypes)
 #print(systems[['System', 'EinsteinRadius_muas', 'EinsteinTime_days']])
 
 df.to_csv('Habitable_Planet_microlensing.csv', index = False)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
