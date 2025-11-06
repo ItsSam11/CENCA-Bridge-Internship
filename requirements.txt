@@ -5,3 +5,5 @@ astropy>=1.2.0
 matplotlib
 simpy
 py-cpuinfo
+pandas
+lxml
